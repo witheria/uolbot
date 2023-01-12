@@ -12,7 +12,7 @@ import interactions
 from dotenv import load_dotenv
 from tabulate import tabulate
 
-_file_handler = TimedRotatingFileHandler("./logs", when="midnight", interval=1, backupCount=7)
+_file_handler = TimedRotatingFileHandler("logs.log", when="midnight", interval=1, backupCount=7)
 _console_handler = logging.StreamHandler(sys.stdout)
 logging.basicConfig(level=logging.INFO, handlers=[_file_handler, _console_handler])
 load_dotenv()
@@ -648,7 +648,7 @@ async def get_json(ctx: interactions.CommandContext):
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
 
     players = [i for i in c.guilds[str(ctx.guild_id)].summ_data.keys()]
-    await ctx.send(json.dump(players, ensure_ascii=False, sort_keys=True))
+    await ctx.send(json.dumps(players, ensure_ascii=False, sort_keys=True))
 
 
 @_bot.command(

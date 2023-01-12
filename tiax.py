@@ -2,16 +2,19 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from contextlib import suppress
 from typing import Callable, Union
+from logging.handlers import TimedRotatingFileHandler
 
 import aiohttp
 import interactions
 from dotenv import load_dotenv
 from tabulate import tabulate
 
-
-logging.basicConfig(level=logging.INFO)
+_file_handler = TimedRotatingFileHandler("./logs", when="midnight", interval=1, backupCount=7)
+_console_handler = logging.StreamHandler(sys.stdout)
+logging.basicConfig(level=logging.INFO, handlers=[_file_handler, _console_handler])
 load_dotenv()
 
 
@@ -192,14 +195,17 @@ class Tiax:
         for name in self.summ_data.keys():
             print(name)
             result1 = await self._byName(name)
-            if not result1:
+            print(result1)
+            if result1:
+                self.summ_data[name]["data"] = result1
+                await asyncio.sleep(1)
+                result2 = await self._bySummoner(name)
+                self.summ_data[name]["info"] = result2
+                await asyncio.sleep(0.1)
+            else:
                 errs.append(name)
-                continue
-            self.summ_data[name]["data"] = result1
-            await asyncio.sleep(1)
-            result2 = await self._bySummoner(name)
-            self.summ_data[name]["info"] = result2
-            await asyncio.sleep(0.1)
+        for name in errs:
+            self.summ_data.pop(name)
         self.save_to_file()
         if self.send_updates and self.updates_channel:
             for guild in _bot.guilds:
@@ -208,7 +214,7 @@ class Tiax:
                         if str(channel.id) == self.updates_channel:
                             await channel.send(embeds=self.generateLeaderboardEmbed(), components=mode_select)
         
-        return len(errs) == 1, errs
+        return len(errs) < 1, errs
 
     def getSummoner(self, name: str):
         """Gets a summoners main data"""
@@ -332,9 +338,10 @@ def sortByTier(players: dict, show_unrankeds: bool = False):
                     points,                                             # Skillevel
                     str(sub_queues[queue]["tier"] + " " +               
                         sub_queues[queue]["rank"] + " " +
-                        str(sub_queues[queue]["leaguePoints"]) + " LP"),# Text
+                        str(sub_queues[queue]["leaguePoints"]) + " LP"),  # Text
                     sub_queues[queue]["wins"],                          # wins
-                    sub_queues[queue]["losses"]                         # losses
+                    sub_queues[queue]["losses"],                         # losses
+                    # int(sub_queues[queue]["wins"]) + int(sub_queues[queue]["losses"])  # games
                     ))
 
             elif show_unrankeds:
@@ -344,7 +351,8 @@ def sortByTier(players: dict, show_unrankeds: bool = False):
                                 0,
                                 str("Unranked"),
                                 0,
-                                0
+                                0,
+                                # 0
                                 ))
 
     return sorted(playings, key=lambda x: x[2], reverse=True)
@@ -373,7 +381,7 @@ def nameDictByKeyValue(putin: list, key: str, deleteKey: bool = False) -> dict:
 @_bot.command(name="leaderboard")
 async def leaderboard(ctx: interactions.CommandContext):
     """Send a leaderboard"""
-    if str(ctx.guild_id) not in c.guilds.keys():
+    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
 
     emb = c.guilds[str(ctx.guild_id)].generateLeaderboardEmbed()
@@ -387,7 +395,7 @@ async def refresh(ctx: interactions.CommandContext):
     """Refresh it all (horrible function)"""
     await ctx.defer()
 
-    if str(ctx.guild_id) not in c.guilds.keys():
+    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
 
     msg = await ctx.send("Refreshing ranks...")
@@ -414,7 +422,7 @@ async def mode_selector(ctx: interactions.CommandContext, response: list):
 )
 async def add_player(ctx: interactions.CommandContext, player_name: str):
     """Adds a player to this guilds Tiax"""
-    if str(ctx.guild_id) not in c.guilds.keys():
+    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
     await ctx.defer()
     msg = await ctx.send("Adding Player...")
@@ -514,7 +522,7 @@ async def batch_add_players(ctx: interactions.CommandContext, players: str, subm
 )
 async def show_unranked_players(ctx: interactions.CommandContext, show_unranked_players: bool = None):
     """self explanatory by the command description i think"""
-    if str(ctx.guild_id) not in c.guilds.keys():
+    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
     
     if not show_unranked_players:
@@ -558,7 +566,7 @@ async def send_updates(ctx: interactions.CommandContext,
     await ctx.defer()
     chn = None
     updates_interval = 900 if updates_interval < 900 else updates_interval
-    if str(ctx.guild_id) not in c.guilds.keys():
+    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
 
     if not send_updates and not updates_channel:
@@ -599,7 +607,7 @@ async def remove_player(ctx: interactions.CommandContext, player_name: str):
     """Removes a player from the list"""
     await ctx.defer()
 
-    if str(ctx.guild_id) not in c.guilds.keys():
+    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
 
     if player_name not in c.guilds[str(ctx.guild_id)].summ_data.keys():
@@ -614,6 +622,33 @@ async def remove_player(ctx: interactions.CommandContext, player_name: str):
         return
 
     await ctx.send(f"{player_name} was successfully deleted from the leaderboard!")
+
+
+@_bot.command(
+        name="drop_leaderboard",
+        description="Wipe the entire leaderboard clean",
+        default_member_permissions=interactions.Permissions.ADMINISTRATOR
+)
+async def drop_leaderboard(ctx: interactions.CommandContext):
+    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
+        c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
+
+    c.guilds[str(ctx.guild_id)].summ_data = {}
+    c.guilds[str(ctx.guild_id)].save_to_file()
+    await ctx.send("Leaderboard dropped!")
+
+
+@_bot.command(
+        name="get_json",
+        description="Get all Players as a JSON list",
+        default_member_permissions=interactions.Permissions.ADMINISTRATOR
+)
+async def get_json(ctx: interactions.CommandContext):
+    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
+        c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
+
+    players = [i for i in c.guilds[str(ctx.guild_id)].summ_data.keys()]
+    await ctx.send(json.dump(players, ensure_ascii=False, sort_keys=True))
 
 
 @_bot.command(

@@ -5,3 +5,5 @@
 /Include
 /.vscode
 /__pycache__
+/logs
+pyvenv.cfg

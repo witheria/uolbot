@@ -1,0 +1,7 @@
+.env
+*.json
+/Lib
+/Scripts
+/Include
+/.vscode
+/__pycache__

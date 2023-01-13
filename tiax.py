@@ -212,7 +212,11 @@ class Tiax:
                 if str(guild.id) == self.guild:
                     for channel in guild.channels:
                         if str(channel.id) == self.updates_channel:
-                            await channel.send(embeds=self.generateLeaderboardEmbed(), components=mode_select)
+                            emb = self.generateLeaderboardEmbed()
+                            if type(emb) == str:
+                                await channel.send(emb, components=mode_select)
+                                return
+                            await channel.send(embeds=emb, components=mode_select)
         
         return len(errs) < 1, errs
 
@@ -237,7 +241,7 @@ class Tiax:
             return
         return self._main_loop.create_task(self._bySummoner(name))
 
-    def generateLeaderboardEmbed(self, gamemodes: list = None, modcall: bool = False,) -> interactions.Embed:
+    def generateLeaderboardEmbed(self, gamemodes: list = None, modcall: bool = False, msg: bool = True) -> interactions.Embed:
 
         """Generates the main leaderboard embed."""
 
@@ -269,9 +273,12 @@ class Tiax:
                                 break
             logging.info("Last Ranks: %s", self.last_ranks if self.last_ranks else "")
             logging.info(ranking)
+            tabl = tabulate(ranking, headers=tab_headers, maxcolwidths=[4, 15, 11, 4, 4])
             self.last_ranks[gamemode] = to_table
-            embed.add_field("⠀", "```\n" + tabulate(ranking, headers=tab_headers) + "```")
-            return embed
+            if not msg and len(tabl) < 1018:
+                embed.add_field("⠀", "```\n" + tabl + "```")
+                return embed
+            return "```\n" + tabl + "```"
 
 
 class Config:
@@ -381,11 +388,14 @@ def nameDictByKeyValue(putin: list, key: str, deleteKey: bool = False) -> dict:
 @_bot.command(name="leaderboard")
 async def leaderboard(ctx: interactions.CommandContext):
     """Send a leaderboard"""
-    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
+    if str(ctx.guild_id) not in c.guilds or type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
 
     emb = c.guilds[str(ctx.guild_id)].generateLeaderboardEmbed()
     if not emb:
+        return
+    if type(emb) == str:
+        await ctx.send(emb, components=mode_select)
         return
     await ctx.send(embeds=emb, components=mode_select)
 
@@ -395,7 +405,7 @@ async def refresh(ctx: interactions.CommandContext):
     """Refresh it all (horrible function)"""
     await ctx.defer()
 
-    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
+    if str(ctx.guild_id) not in c.guilds or type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
 
     msg = await ctx.send("Refreshing ranks...")
@@ -405,7 +415,11 @@ async def refresh(ctx: interactions.CommandContext):
 
 @_bot.component("mode_select")
 async def mode_selector(ctx: interactions.CommandContext, response: list):
-    await ctx.edit(embeds=c.guilds[str(ctx.guild_id)].generateLeaderboardEmbed(gamemodes=response, modcall=True))
+    emb = c.guilds[str(ctx.guild_id)].generateLeaderboardEmbed(gamemodes=response, modcall=True)
+    if type(emb) == str:
+        await ctx.edit(emb)
+        return
+    await ctx.edit(embeds=emb)
 
 
 @_bot.command(
@@ -422,7 +436,7 @@ async def mode_selector(ctx: interactions.CommandContext, response: list):
 )
 async def add_player(ctx: interactions.CommandContext, player_name: str):
     """Adds a player to this guilds Tiax"""
-    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
+    if str(ctx.guild_id) not in c.guilds or type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
     await ctx.defer()
     msg = await ctx.send("Adding Player...")
@@ -462,7 +476,7 @@ async def add_player(ctx: interactions.CommandContext, player_name: str):
 async def batch_add_players(ctx: interactions.CommandContext, players: str, submit_type: str, separator: str = None):
     """this was also not very pleasant to write"""
     await ctx.defer()
-    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
+    if str(ctx.guild_id) not in c.guilds or type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
     
     proxy_players = []
@@ -522,7 +536,7 @@ async def batch_add_players(ctx: interactions.CommandContext, players: str, subm
 )
 async def show_unranked_players(ctx: interactions.CommandContext, show_unranked_players: bool = None):
     """self explanatory by the command description i think"""
-    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
+    if str(ctx.guild_id) not in c.guilds or type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
     
     if not show_unranked_players:
@@ -566,7 +580,7 @@ async def send_updates(ctx: interactions.CommandContext,
     await ctx.defer()
     chn = None
     updates_interval = 900 if updates_interval < 900 else updates_interval
-    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
+    if str(ctx.guild_id) not in c.guilds or type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
 
     if not send_updates and not updates_channel:
@@ -607,7 +621,7 @@ async def remove_player(ctx: interactions.CommandContext, player_name: str):
     """Removes a player from the list"""
     await ctx.defer()
 
-    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
+    if str(ctx.guild_id) not in c.guilds or type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
 
     if player_name not in c.guilds[str(ctx.guild_id)].summ_data.keys():
@@ -630,7 +644,7 @@ async def remove_player(ctx: interactions.CommandContext, player_name: str):
         default_member_permissions=interactions.Permissions.ADMINISTRATOR
 )
 async def drop_leaderboard(ctx: interactions.CommandContext):
-    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
+    if str(ctx.guild_id) not in c.guilds or type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
 
     c.guilds[str(ctx.guild_id)].summ_data = {}
@@ -644,7 +658,7 @@ async def drop_leaderboard(ctx: interactions.CommandContext):
         default_member_permissions=interactions.Permissions.ADMINISTRATOR
 )
 async def get_json(ctx: interactions.CommandContext):
-    if str(ctx.guild_id) not in c.guilds.keys() and type(c.guilds[str(ctx.guild_id)]) != Tiax:
+    if str(ctx.guild_id) not in c.guilds or type(c.guilds[str(ctx.guild_id)]) != Tiax:
         c.guilds[str(ctx.guild_id)] = Tiax(str(ctx.guild_id))
 
     players = [i for i in c.guilds[str(ctx.guild_id)].summ_data.keys()]
